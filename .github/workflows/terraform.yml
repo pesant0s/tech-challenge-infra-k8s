@@ -1,0 +1,101 @@
+name: Terraform
+
+# Plan e apply só rodam com AMBIENTE_ATIVO=true (ADR-013). Sem cluster não há role,
+# então nenhum pipeline recria o cluster do zero: ligar cobrança é sempre `make up`.
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: terraform-infra-k8s
+  cancel-in-progress: false
+
+env:
+  AWS_REGION: us-east-1
+  TF_IN_AUTOMATION: "true"
+  TF_VERSION: "1.10.5"
+  TF_VAR_org_github: ${{ github.repository_owner }}
+
+permissions:
+  contents: read
+
+jobs:
+  validar:
+    name: Formatação e validação
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+      - run: terraform fmt -check -recursive -diff
+      - run: terraform init -backend=false -input=false
+      - run: terraform validate
+
+  ambiente-desligado:
+    name: Plan e apply não executados
+    needs: validar
+    if: vars.AMBIENTE_ATIVO != 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "### Plan e apply pulados — AMBIENTE_ATIVO não está true, o cluster está desligado." >> "$GITHUB_STEP_SUMMARY"
+
+  aplicar:
+    name: Plan e apply
+    needs: validar
+    if: vars.AMBIENTE_ATIVO == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+      pull-requests: write
+    env:
+      TF_VAR_newrelic_license_key: ${{ secrets.NEW_RELIC_LICENSE_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+
+      - name: Autenticar na AWS via OIDC
+        id: aws
+        continue-on-error: true
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Explicar falha de autenticação
+        if: steps.aws.outcome == 'failure'
+        run: |
+          echo "::error::AMBIENTE_ATIVO=true, mas a role não pôde ser assumida: o cluster foi destruído sem 'make down' ou falta o secret AWS_ROLE_ARN."
+          exit 1
+
+      - name: Init
+        run: |
+          terraform init -input=false \
+            -backend-config="bucket=tech-challenge-tfstate-$(aws sts get-caller-identity --query Account --output text)" \
+            -backend-config="region=$AWS_REGION"
+
+      - name: Plan
+        run: terraform plan -input=false -no-color -out=tfplan | tee plan.txt
+
+      - name: Comentar o plan no PR
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const plano = require('fs').readFileSync('plan.txt', 'utf8').slice(0, 60000);
+            await github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: `#### Terraform plan — \`infra-k8s\`\n\n<details><summary>Ver plano</summary>\n\n\`\`\`hcl\n${plano}\n\`\`\`\n\n</details>`
+            });
+
+      - name: Apply
+        if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+        run: terraform apply -input=false -auto-approve tfplan
