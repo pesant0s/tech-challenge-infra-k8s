@@ -1,0 +1,11 @@
+# Copie para terraform.tfvars e ajuste. O arquivo real não é versionado.
+
+# A conta vem de AWS_PROFILE (ou das credenciais no ambiente) — não fixe perfil aqui.
+regiao     = "us-east-1"
+# org_github vem do remote do git quando se usa `make`. Só defina se rodar
+# o terraform diretamente:
+# org_github = "seu-usuario-github"
+
+# Chave de licença do New Relic (painel → API keys → INGEST-LICENSE).
+# Deixe vazia para subir o cluster sem o agente.
+newrelic_license_key = ""

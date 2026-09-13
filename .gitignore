@@ -1,0 +1,21 @@
+# Estado do Terraform — vive no S3, nunca no repositório
+*.tfstate
+*.tfstate.*
+.terraform/
+.terraform.lock.hcl.bak
+crash.log
+crash.*.log
+
+# Variáveis reais (podem conter dados da conta)
+*.tfvars
+!*.tfvars.example
+*.auto.tfvars
+
+# Planos salvos — contêm valores sensíveis em texto claro
+*.tfplan
+plan.out
+
+# SO e editores
+.DS_Store
+.idea/
+.vscode/
