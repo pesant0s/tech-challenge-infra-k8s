@@ -416,8 +416,10 @@ Com `email_alertas` definido, os incidentes chegam por e-mail; sem ele, ficam em
 
 Com `make`, elas vêm das variáveis de ambiente `NEW_RELIC_LICENSE_KEY`, `NEW_RELIC_API_KEY`,
 `NEW_RELIC_ACCOUNT_ID` e `EMAIL_ALERTAS`, as mesmas que o `make github-segredos` grava no GitHub.
-A licença (`INGEST - LICENSE`) e a User key (`USER`, começa com `NRAK-`) ficam em **API keys**, no
-New Relic; o ID da conta aparece na mesma tela.
+A User key (`USER`, começa com `NRAK-`) e o ID da conta ficam em **API keys**, no New Relic. Essa tela
+pode mostrar só o ID da licença; o comando que busca o valor pela API, com a User key, está no roteiro
+*Do zero numa conta nova*, no README do `tech-challenge-infra-db`. Para conta na região EU, use
+`api.eu.newrelic.com` e `TF_VAR_newrelic_regiao=EU`.
 
 ---
 
