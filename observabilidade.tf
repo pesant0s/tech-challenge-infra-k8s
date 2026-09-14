@@ -298,5 +298,6 @@ resource "newrelic_cloud_aws_integrations" "principal" {
   lambda {
     aws_regions              = [var.regiao]
     metrics_polling_interval = 300
+    fetch_tags               = true
   }
 }
