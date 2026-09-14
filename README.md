@@ -188,11 +188,14 @@ pelo próprio GitHub. Nenhuma `AWS_ACCESS_KEY_ID` é guardada como secret.
 **Motivo.** Chave estática não expira, não rotaciona sozinha e vaza em log com
 facilidade. O token OIDC vale minutos e é emitido por execução.
 
-**Detalhe que costuma falhar.** A condição de confiança restringe por `sub`:
-`repo:<org>/<repo>:ref:refs/heads/main`. Sem ela, **qualquer repositório do GitHub** poderia
-assumir a role; com `repo:<org>/<repo>:*`, bastaria um PR ou uma branch com o workflow alterado.
-Como a `main` só recebe código por PR, com os checks do CI obrigatórios, só o que foi integrado chega à conta. Os
-quatro repositórios autorizados estão em `var.repos_github`.
+**Detalhe que costuma falhar.** A condição de confiança restringe o `sub` à `main` de cada
+repositório. Sem ela, **qualquer repositório do GitHub** poderia assumir a role; com
+`repo:<org>/<repo>:*`, bastaria um PR ou uma branch com o workflow alterado. O GitHub envia o `sub` em
+dois formatos: o clássico, `repo:<org>/<repo>:ref:refs/heads/main`, e o de IDs imutáveis,
+`repo:<org>@<id>/<repo>@<id>:ref:refs/heads/main`, que estes repositórios usam. A condição aceita os
+dois, com o ID do dono fixado. Como a `main` só recebe código por PR, com os checks do CI obrigatórios,
+só o que foi integrado chega à conta. Os repositórios autorizados estão em `var.repos_github`, e o
+`make` descobre o ID do dono pelo `gh`.
 
 **Segunda armadilha.** Autenticar na AWS não basta para falar com o cluster: o EKS
 separa autenticação de autorização. Por isso existem `aws_eks_access_entry` e

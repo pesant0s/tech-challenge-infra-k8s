@@ -9,7 +9,8 @@ BUCKET = tech-challenge-tfstate-$(CONTA)
 # Delimitador `|` no sed: num Makefile, `#` abriria um comentário.
 GITHUB_OWNER ?= $(shell git config --get remote.origin.url 2>/dev/null | sed -E 's|^.*github\.com[:/]([^/]+)/.*$$|\1|')
 export GITHUB_OWNER
-TF_VARS = -var "org_github=$(GITHUB_OWNER)"
+GITHUB_OWNER_ID ?= $(shell gh api users/$(GITHUB_OWNER) --jq .id 2>/dev/null)
+TF_VARS = -var "org_github=$(GITHUB_OWNER)" -var "id_dono_github=$(GITHUB_OWNER_ID)"
 # Chaves do New Relic pelas mesmas variáveis que o github-segredos grava; um terraform.tfvars ainda prevalece.
 TF_VAR_newrelic_license_key ?= $(NEW_RELIC_LICENSE_KEY)
 TF_VAR_newrelic_api_key ?= $(NEW_RELIC_API_KEY)
@@ -27,6 +28,7 @@ conta: ## Mostra em qual conta AWS os comandos vão atuar
 preflight: conta
 	@aws ssm get-parameter --name /tech-challenge/network/vpc_id >/dev/null 2>&1 || { echo "A rede do tech-challenge-infra-db não existe nesta conta: aplique aquele repositório primeiro."; exit 1; }
 	@test -n "$(GITHUB_OWNER)" || { echo "Dono dos repositórios desconhecido: rode com GITHUB_OWNER=seu-usuario."; exit 1; }
+	@test -n "$(GITHUB_OWNER_ID)" || { echo "ID do dono no GitHub não encontrado: confira o gh auth status."; exit 1; }
 
 init: conta ## Inicializa o Terraform com o estado desta conta
 	terraform init -backend-config="bucket=$(BUCKET)" -backend-config="region=$(AWS_REGION)"

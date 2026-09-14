@@ -23,11 +23,15 @@ data "aws_iam_policy_document" "confianca_github" {
       values   = ["sts.amazonaws.com"]
     }
 
-    # Só a main dos repositórios do dono: branch, PR ou workflow alterado fora dela não chegam à conta.
+    # Só a main dos repositórios do dono. O GitHub envia o sub no formato clássico (repo:dono/repo)
+    # ou com IDs imutáveis (repo:dono@id/repo@id); os dois são aceitos, com o ID do dono fixado.
     condition {
-      test     = "StringEquals"
+      test     = "StringLike"
       variable = "token.actions.githubusercontent.com:sub"
-      values   = [for repo in var.repos_github : "repo:${var.org_github}/${repo}:ref:refs/heads/main"]
+      values = flatten([for repo in var.repos_github : [
+        "repo:${var.org_github}/${repo}:ref:refs/heads/main",
+        "repo:${var.org_github}@${var.id_dono_github}/${repo}@*:ref:refs/heads/main",
+      ]])
     }
   }
 }

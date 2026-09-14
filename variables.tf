@@ -62,6 +62,16 @@ variable "org_github" {
   }
 }
 
+variable "id_dono_github" {
+  description = "ID numérico do dono dos repositórios; o GitHub o inclui no sub do token OIDC"
+  type        = string
+
+  validation {
+    condition     = can(regex("^[0-9]+$", var.id_dono_github))
+    error_message = "id_dono_github deve ser o ID numérico do usuário ou organização no GitHub."
+  }
+}
+
 variable "repos_github" {
   description = "Repositórios autorizados a assumir a role via OIDC"
   type        = list(string)
