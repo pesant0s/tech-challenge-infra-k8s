@@ -25,7 +25,7 @@ variable "versao_kubernetes" {
 variable "tipos_instancia" {
   description = "Tipos aceitos para os nodes; mais de um aumenta a chance de capacidade Spot"
   type        = list(string)
-  default     = ["t3.small", "t3a.small"]
+  default     = ["t3.medium", "t3a.medium"]
 }
 
 variable "capacidade_spot" {

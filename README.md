@@ -57,7 +57,7 @@ flowchart TB
 
         subgraph vpc["VPC 10.0.0.0/16 — criada pelo infra-db"]
             subgraph publicas["Subnets públicas"]
-                nodes["EKS Node Group<br/>2 a 4 × t3.small Spot<br/>NodePort 30080"]
+                nodes["EKS Node Group<br/>2 a 4 × t3.medium Spot<br/>NodePort 30080"]
             end
 
             subgraph privadas["Subnets privadas"]
@@ -164,7 +164,11 @@ a integração do gateway num segundo `apply`. Mais idiomático, porém com duas
 
 ### ADR-006 · Nodes em Spot com múltiplos tipos de instância
 
-**Decisão.** `capacity_type = "SPOT"` com dois tipos aceitos, `t3.small` e `t3a.small`.
+**Decisão.** `capacity_type = "SPOT"` com dois tipos aceitos, `t3.medium` e `t3a.medium`.
+
+**Por que medium.** No EKS, o limite de pods por node vem das interfaces de rede: 11 num `t3.small`,
+17 num `t3.medium`. Os pods de sistema e do New Relic ocupam sozinhos 18 vagas, e no primeiro ensaio
+dois `t3.small` não deixaram espaço para a API.
 
 **Motivo.** Spot custa ~70% menos. O risco é a interrupção com dois minutos de aviso —
 mitigado por aceitar vários tipos (mais chance de encontrar capacidade) e manter no
@@ -211,9 +215,9 @@ fica em `<unknown>/70%` e **nunca escala** — e a escalabilidade que o desafio 
 deixa de ser demonstrável.
 
 **Consequência.** Não há Cluster Autoscaler: o node group fica nos 2 nodes desejados, e o máximo
-de 4 vale para escala manual. Pelas requests, dois `t3.small` comportam as 6 réplicas do teto do
-HPA (192Mi cada) junto com os pods de sistema e do New Relic, com pouca folga. Em produção,
-Cluster Autoscaler ou Karpenter.
+de 4 vale para escala manual. Dois `t3.medium` somam 34 vagas de pod; tirando as 18 de sistema e do
+New Relic, sobram 16, suficientes para as 6 réplicas do teto do HPA e o pod do teste de fumaça. Em
+produção, Cluster Autoscaler ou Karpenter.
 
 ---
 
@@ -278,7 +282,7 @@ de API fora do ar abre um incidente. É esperado e fecha sozinho quando a API re
 | Recurso | Detalhe |
 |---|---|
 | EKS Cluster | Kubernetes 1.36, logs de API e auditoria por 7 dias |
-| Node Group | 2 a 4 × `t3.small` Spot, subnets públicas |
+| Node Group | 2 a 4 × `t3.medium` Spot, subnets públicas |
 | Addons | `vpc-cni`, `kube-proxy`, `coredns`, `metrics-server` |
 | ECR | `oficina-api`, varredura no push, retenção das 10 últimas imagens |
 | NLB interno | Alvo: grupo de auto scaling dos nodes na porta 30080 |
@@ -356,13 +360,13 @@ Consumido pelo `auth-lambda` e pelos pipelines:
 | Recurso | Por hora | Observação |
 |---|---|---|
 | EKS control plane | US$ 0,100 | sem free tier; só em versão com suporte padrão — no estendido, US$ 0,60 |
-| 2 × t3.small Spot | US$ 0,014 | ~70% de desconto |
+| 2 × t3.medium Spot | US$ 0,033 | ~70% de desconto |
 | NLB interno | US$ 0,0225 | + custo por LCU processada |
 | EBS dos nodes | US$ 0,004 | |
 | API Gateway | ~US$ 0 | US$ 1,00 por milhão de requisições |
 | ECR | ~US$ 0 | 500 MB grátis; a política de retenção segura o resto |
 | Métricas da Lambda no New Relic | ~US$ 0 | leituras na API do CloudWatch a cada 5 min, centavos por sessão |
-| **Total** | **~US$ 0,14/h** | ~US$ 3,40/dia · ~US$ 100/mês |
+| **Total** | **~US$ 0,16/h** | ~US$ 3,80/dia · ~US$ 115/mês |
 
 Configure um **AWS Budget** com alerta em US$ 5 e US$ 20. Todo recurso leva a tag
 `Project=tech-challenge`, então o Cost Explorer isola esse gasto.
@@ -412,8 +416,10 @@ Com `email_alertas` definido, os incidentes chegam por e-mail; sem ele, ficam em
 
 Com `make`, elas vêm das variáveis de ambiente `NEW_RELIC_LICENSE_KEY`, `NEW_RELIC_API_KEY`,
 `NEW_RELIC_ACCOUNT_ID` e `EMAIL_ALERTAS`, as mesmas que o `make github-segredos` grava no GitHub.
-A licença (`INGEST - LICENSE`) e a User key (`USER`, começa com `NRAK-`) ficam em **API keys**, no
-New Relic; o ID da conta aparece na mesma tela.
+A User key (`USER`, começa com `NRAK-`) e o ID da conta ficam em **API keys**, no New Relic. Essa tela
+pode mostrar só o ID da licença; o comando que busca o valor pela API, com a User key, está no roteiro
+*Do zero numa conta nova*, no README do `tech-challenge-infra-db`. Para conta na região EU, use
+`api.eu.newrelic.com` e `TF_VAR_newrelic_regiao=EU`.
 
 ---
 

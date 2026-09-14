@@ -35,10 +35,6 @@ resource "helm_release" "newrelic" {
     value = "true"
   }
 
-  set {
-    name  = "nri-prometheus.enabled"
-    value = "true"
-  }
 
   depends_on = [aws_eks_node_group.principal, aws_eks_addon.essenciais]
 }
