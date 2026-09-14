@@ -192,9 +192,12 @@ resource "newrelic_nrql_alert_condition" "oficina" {
   name                         = each.value.nome
   enabled                      = true
   violation_time_limit_seconds = 86400
-  aggregation_method           = "event_flow"
-  aggregation_delay            = 120
   aggregation_window           = each.value.janela
+  # As consultas contam falhas: sem falha não há ponto de dado, e sem o preenchimento com 0 o incidente não fecha.
+  aggregation_method = "event_timer"
+  aggregation_timer  = each.value.janela
+  fill_option        = "static"
+  fill_value         = 0
 
   nrql {
     query = each.value.consulta
