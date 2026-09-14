@@ -10,6 +10,10 @@ terraform {
       source  = "hashicorp/helm"
       version = "~> 2.14"
     }
+    newrelic = {
+      source  = "newrelic/newrelic"
+      version = "~> 3.97"
+    }
     tls = {
       source  = "hashicorp/tls"
       version = "~> 4.0"

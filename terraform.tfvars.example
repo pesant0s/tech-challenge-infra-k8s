@@ -9,3 +9,10 @@ regiao     = "us-east-1"
 # Chave de licença do New Relic (painel → API keys → INGEST-LICENSE).
 # Deixe vazia para subir o cluster sem o agente.
 newrelic_license_key = ""
+
+# Dashboards, alertas e monitor de uptime (painel → API keys → USER key, e o ID da conta).
+# Vazios, nada disso é criado.
+newrelic_api_key    = ""
+newrelic_account_id = ""
+# newrelic_regiao   = "EU"
+# email_alertas     = "voce@exemplo.com"
