@@ -23,11 +23,11 @@ data "aws_iam_policy_document" "confianca_github" {
       values   = ["sts.amazonaws.com"]
     }
 
-    # Sem esta condição, qualquer repositório do GitHub assumiria a role.
+    # Só a main dos repositórios do dono: branch, PR ou workflow alterado fora dela não chegam à conta.
     condition {
-      test     = "StringLike"
+      test     = "StringEquals"
       variable = "token.actions.githubusercontent.com:sub"
-      values   = [for repo in var.repos_github : "repo:${var.org_github}/${repo}:*"]
+      values   = [for repo in var.repos_github : "repo:${var.org_github}/${repo}:ref:refs/heads/main"]
     }
   }
 }

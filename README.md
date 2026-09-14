@@ -23,7 +23,30 @@ Terraform que provisiona o **cluster Amazon EKS**, o **API Gateway**, o **ECR**,
 
 ---
 
+## Documentação
+
+| Documento | Onde está |
+|---|---|
+| Diagrama de componentes | `tech-challenge-infra-k8s` · README, seção *Arquitetura* |
+| Sequência da autenticação por CPF | `tech-challenge-infra-k8s` · README, *Fluxo de uma requisição autenticada* |
+| Sequência da abertura de ordem de serviço | `tech-challenge-app` · README, *Abertura de uma ordem de serviço* |
+| Modelo de dados: ER, relacionamentos e ajustes | `tech-challenge-app` · `docs/modelo-de-dados.md` |
+| RFC-001 · Escolha da nuvem | `tech-challenge-infra-k8s` · `docs/rfc/RFC-001-nuvem.md` |
+| RFC-002 · Escolha do banco de dados | `tech-challenge-infra-db` · `docs/rfc/RFC-002-banco-de-dados.md` |
+| RFC-003 · Estratégia de autenticação | `tech-challenge-auth-lambda` · `docs/rfc/RFC-003-autenticacao.md` |
+| ADR-001 a 004 · rede e banco | `tech-challenge-infra-db` · README |
+| ADR-005 a 008, 013 e 014 · cluster, CI e observabilidade | `tech-challenge-infra-k8s` · README |
+| ADR-009 a 012 · autenticação | `tech-challenge-auth-lambda` · README |
+| Swagger | `<url_api>/docs` na AWS · `http://localhost:8000/docs` localmente |
+| Coleção Postman | `tech-challenge-app` · `postman/oficina.postman_collection.json` |
+| Ambientes e deploy ativo | só produção, com a dispensa de homologação registrada no README do `tech-challenge-app`; o ambiente AWS é efêmero (ADR-013), e a URL da API sai em `make output`, no `tech-challenge-infra-k8s`, durante uma sessão |
+
+
+---
+
 ## Arquitetura
+
+Diagrama de componentes da solução: nuvem, APIs, banco e monitoramento.
 
 ```mermaid
 flowchart TB
@@ -46,6 +69,8 @@ flowchart TB
 
         ecr[("ECR<br/>oficina-api")]
         eks["EKS Control Plane<br/>metrics-server · CoreDNS"]
+        sm[("Secrets Manager<br/>credenciais · SECRET_KEY")]
+        cw["CloudWatch<br/>logs e métricas da Lambda"]
     end
 
     nr["New Relic<br/>APM · logs · métricas · alertas"]
@@ -62,7 +87,10 @@ flowchart TB
     gh -->|push imagem| ecr
     gh -->|kubectl apply| eks
     nodes -.->|telemetria| nr
-    lambda -.->|métricas via CloudWatch| nr
+    lambda -.->|logs e métricas| cw
+    cw -.->|métricas da Lambda| nr
+    sm -.->|credenciais| lambda
+    gh -->|lê credenciais no deploy| sm
     nr -.->|uptime: GET /health| apigw
 
     classDef custo fill:#f9e5d8,stroke:#b5651d,color:#5c3a1e
@@ -109,6 +137,8 @@ token é rejeitado com erro genérico de credencial — vale conferir no primeir
 
 ## Decisões arquiteturais
 
+A escolha da nuvem, comparada com Azure e Google Cloud, está na [RFC-001](docs/rfc/RFC-001-nuvem.md).
+
 ### ADR-005 · O NLB é do Terraform, não do Kubernetes
 
 **Contexto.** O caminho idiomático seria um `Service` do tipo `LoadBalancer`, deixando
@@ -154,8 +184,10 @@ pelo próprio GitHub. Nenhuma `AWS_ACCESS_KEY_ID` é guardada como secret.
 facilidade. O token OIDC vale minutos e é emitido por execução.
 
 **Detalhe que costuma falhar.** A condição de confiança restringe por `sub`:
-`repo:<org>/<repo>:*`. Sem ela, **qualquer repositório do GitHub** poderia assumir a
-role. Os quatro repositórios autorizados estão em `var.repos_github`.
+`repo:<org>/<repo>:ref:refs/heads/main`. Sem ela, **qualquer repositório do GitHub** poderia
+assumir a role; com `repo:<org>/<repo>:*`, bastaria um PR ou uma branch com o workflow alterado.
+Como a `main` só recebe código por PR, apenas o que foi revisado e integrado chega à conta. Os
+quatro repositórios autorizados estão em `var.repos_github`.
 
 **Segunda armadilha.** Autenticar na AWS não basta para falar com o cluster: o EKS
 separa autenticação de autorização. Por isso existem `aws_eks_access_entry` e
@@ -163,8 +195,8 @@ separa autenticação de autorização. Por isso existem `aws_eks_access_entry` 
 mesmo com credenciais válidas.
 
 **Permissões.** A role tem `AdministratorAccess`, porque três dos quatro pipelines rodam
-Terraform e criam VPC, RDS, EKS, IAM e Lambda. O limite é a confiança: só os quatro
-repositórios do dono assumem a role, e só por OIDC. Em produção, uma role por pipeline,
+Terraform e criam VPC, RDS, EKS, IAM e Lambda. O limite é a confiança: só a `main` dos
+quatro repositórios do dono assume a role, e só por OIDC. Em produção, uma role por pipeline,
 com privilégio mínimo.
 
 ---
@@ -178,9 +210,10 @@ alguém publicar métricas de consumo na API do Kubernetes. Sem o metrics-server
 fica em `<unknown>/70%` e **nunca escala** — e a escalabilidade que o desafio pede
 deixa de ser demonstrável.
 
-**Consequência.** O teto do node group (4 nodes) precisa comportar o teto do HPA
-(6 réplicas). Com 6 pods de 192Mi de request, dois `t3.small` já dão conta; o teto
-existe como folga.
+**Consequência.** Não há Cluster Autoscaler: o node group fica nos 2 nodes desejados, e o máximo
+de 4 vale para escala manual. Pelas requests, dois `t3.small` comportam as 6 réplicas do teto do
+HPA (192Mi cada) junto com os pods de sistema e do New Relic, com pouca folga. Em produção,
+Cluster Autoscaler ou Karpenter.
 
 ---
 
@@ -209,7 +242,7 @@ pulados, com o motivo no resumo da execução. `make up` liga a variável ao fin
 **Consequências.**
 - Entre sessões, só o bucket do estado sobrevive — e `make bootstrap-destroy`, no
   `tech-challenge-infra-db`, o apaga ao fim da entrega.
-- Com a variável desligada, PRs de infraestrutura têm validação, mas não `plan`.
+- PRs de infraestrutura têm validação, mas não `plan`: só a `main` assume a role (ADR-007).
 - Falha real de autenticação com a variável em `true` continua vermelha, com mensagem que
   explica as causas prováveis. A chave não mascara erro.
 - Como a role só existe enquanto o cluster existe, **nenhum pipeline consegue recriar o
@@ -251,7 +284,7 @@ de API fora do ar abre um incidente. É esperado e fecha sozinho quando a API re
 | NLB interno | Alvo: grupo de auto scaling dos nodes na porta 30080 |
 | API Gateway HTTP | Rota coringa para o cluster, throttling, access logs em JSON |
 | VPC Link | Ligação privada entre o gateway e o NLB |
-| OIDC + Role | `AdministratorAccess`, restrita por OIDC aos quatro repositórios |
+| OIDC + Role | `AdministratorAccess`, assumida só pela `main` dos quatro repositórios |
 | Launch template | Coloca os nodes no grupo `cliente-db`, o único que o RDS aceita |
 | New Relic | `nri-bundle` via Helm — infraestrutura, eventos, logs e Prometheus |
 | Dashboard e alertas | Painel da oficina, 2 alertas e monitor de uptime (com a User key) |
@@ -388,8 +421,7 @@ New Relic; o ID da conta aparece na mesma tela.
 
 | Evento | `AMBIENTE_ATIVO` | O que acontece |
 |---|---|---|
-| Pull Request | qualquer | `fmt` e `validate` |
-| Pull Request | `true` | acima, mais `plan` comentado no PR |
+| Pull Request | qualquer | `fmt` e `validate`; sem `plan`, porque só a `main` assume a role |
 | push em `main` ou execução manual | `true` | `plan` e `apply` no cluster que está no ar |
 | push em `main` ou execução manual | ausente ou `false` | só validação; plan e apply **pulados**, com o motivo no resumo |
 
