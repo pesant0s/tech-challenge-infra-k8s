@@ -4,7 +4,7 @@ locals {
   parametros_publicados = {
     "cluster/nome"            = aws_eks_cluster.principal.name
     "apigateway/id"           = aws_apigatewayv2_api.principal.id
-    "apigateway/endpoint"     = aws_apigatewayv2_stage.principal.invoke_url
+    "apigateway/endpoint"     = local.url_api
     "apigateway/execucao_arn" = aws_apigatewayv2_api.principal.execution_arn
   }
 }

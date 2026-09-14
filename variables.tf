@@ -80,6 +80,31 @@ variable "newrelic_license_key" {
   default     = ""
 }
 
+variable "newrelic_api_key" {
+  description = "User key do New Relic (NRAK-...); vazia, dashboards, alertas e monitor não são criados"
+  type        = string
+  sensitive   = true
+  default     = ""
+}
+
+variable "newrelic_account_id" {
+  description = "ID da conta no New Relic"
+  type        = string
+  default     = ""
+}
+
+variable "newrelic_regiao" {
+  description = "Região da conta no New Relic: US ou EU"
+  type        = string
+  default     = "US"
+}
+
+variable "email_alertas" {
+  description = "E-mail que recebe os alertas; vazio, os incidentes ficam só no painel do New Relic"
+  type        = string
+  default     = ""
+}
+
 variable "newrelic_cluster_name" {
   description = "Nome do cluster no New Relic"
   type        = string

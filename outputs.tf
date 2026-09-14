@@ -4,11 +4,11 @@ output "nome_cluster" {
 
 output "url_api" {
   description = "URL pública da API"
-  value       = aws_apigatewayv2_stage.principal.invoke_url
+  value       = local.url_api
 }
 
 output "url_swagger" {
-  value = "${aws_apigatewayv2_stage.principal.invoke_url}/docs"
+  value = "${local.url_api}/docs"
 }
 
 output "url_ecr" {

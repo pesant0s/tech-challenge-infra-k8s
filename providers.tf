@@ -27,3 +27,10 @@ provider "helm" {
     }
   }
 }
+
+# Sem as chaves, o provider ainda exige uma credencial para iniciar; nenhum recurso chega a usá-la.
+provider "newrelic" {
+  account_id = local.newrelic_ativo ? var.newrelic_account_id : "1"
+  api_key    = local.newrelic_ativo ? var.newrelic_api_key : "NRAK-DESLIGADO"
+  region     = var.newrelic_regiao
+}

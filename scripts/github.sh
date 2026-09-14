@@ -42,6 +42,12 @@ case "$acao" in
     else
       echo "⚠ NEW_RELIC_LICENSE_KEY não exportada: o New Relic fica desligado nos pipelines."
     fi
+    if [[ -n "${NEW_RELIC_API_KEY:-}" && -n "${NEW_RELIC_ACCOUNT_ID:-}" ]]; then
+      printf '%s' "$NEW_RELIC_API_KEY" | gh secret set NEW_RELIC_API_KEY --repo "$dono/tech-challenge-infra-k8s"
+      printf '%s' "$NEW_RELIC_ACCOUNT_ID" | gh secret set NEW_RELIC_ACCOUNT_ID --repo "$dono/tech-challenge-infra-k8s"
+    else
+      echo "⚠ NEW_RELIC_API_KEY e NEW_RELIC_ACCOUNT_ID não exportadas: dashboards e alertas ficam fora do pipeline."
+    fi
     echo "✓ segredos gravados em $dono"
     ;;
   implantar)

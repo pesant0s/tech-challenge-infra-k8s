@@ -62,6 +62,8 @@ flowchart TB
     gh -->|push imagem| ecr
     gh -->|kubectl apply| eks
     nodes -.->|telemetria| nr
+    lambda -.->|métricas via CloudWatch| nr
+    nr -.->|uptime: GET /health| apigw
 
     classDef custo fill:#f9e5d8,stroke:#b5651d,color:#5c3a1e
     class eks,nlb custo
@@ -215,6 +217,29 @@ pulados, com o motivo no resumo da execução. `make up` liga a variável ao fin
 
 ---
 
+### ADR-014 · Observabilidade como código
+
+**Decisão.** Dashboard, alertas, monitor de uptime e a coleta das métricas da Lambda são recursos
+Terraform deste repositório, criados e destruídos junto com o cluster.
+
+**Motivo.** Quem reproduz o ambiente em outra conta recebe o mesmo painel e os mesmos alertas,
+sem montá-los à mão; e nenhum painel sobra apontando para um ambiente que já não existe.
+
+**Como os dados chegam.**
+- **Logs:** o `nri-bundle` coleta o stdout dos pods, e o JSON da aplicação vira atributos
+  consultáveis (`evento`, `status_novo`, `http_status`...). O agente Python não encaminha logs,
+  para não duplicar cada linha.
+- **APM e traces:** o agente Python na imagem. Cada linha de log leva `trace.id`, que liga o log
+  ao trace.
+- **Lambda:** o New Relic lê as métricas no CloudWatch assumindo uma role somente leitura, com o
+  ID da conta como `ExternalId`. Os logs da função continuam no CloudWatch.
+- **Uptime:** um monitor sintético chama `/health` pelo API Gateway a cada 5 minutos.
+
+**Consequência.** Entre o `make up` e o primeiro deploy da aplicação, o monitor falha e o alerta
+de API fora do ar abre um incidente. É esperado e fecha sozinho quando a API responde.
+
+---
+
 ## O que é criado
 
 | Recurso | Detalhe |
@@ -229,6 +254,8 @@ pulados, com o motivo no resumo da execução. `make up` liga a variável ao fin
 | OIDC + Role | `AdministratorAccess`, restrita por OIDC aos quatro repositórios |
 | Launch template | Coloca os nodes no grupo `cliente-db`, o único que o RDS aceita |
 | New Relic | `nri-bundle` via Helm — infraestrutura, eventos, logs e Prometheus |
+| Dashboard e alertas | Painel da oficina, 2 alertas e monitor de uptime (com a User key) |
+| Role do New Relic | Somente leitura, para coletar as métricas da Lambda no CloudWatch |
 
 ---
 
@@ -246,7 +273,8 @@ pulados, com o motivo no resumo da execução. `make up` liga a variável ao fin
 ### Subir
 
 ```bash
-make github-segredos   # uma vez: AWS_ROLE_ARN nos 4 repositórios — o ARN não muda entre sessões
+export NEW_RELIC_LICENSE_KEY=... NEW_RELIC_API_KEY=NRAK-... NEW_RELIC_ACCOUNT_ID=...   # opcionais
+make github-segredos   # uma vez: AWS_ROLE_ARN e as chaves do New Relic exportadas — não mudam entre sessões
 make up                # ~15 min · a cobrança começa aqui · liga AMBIENTE_ATIVO no final
 make implantar         # aciona os pipelines da Lambda e da API
 make output            # url_api e url_swagger
@@ -270,7 +298,9 @@ make custo             # o que está pesando agora
 make down              # desliga AMBIENTE_ATIVO, destrói · ~10 min · encerra a cobrança
 ```
 
-O `down` recusa enquanto a Lambda existir: destrua o `tech-challenge-auth-lambda` antes.
+O `down` recusa enquanto a Lambda existir: destrua o `tech-challenge-auth-lambda` antes. Também
+recusa se o dashboard e os alertas existirem e `NEW_RELIC_API_KEY` não estiver exportada, porque
+sem ela o Terraform não consegue apagá-los.
 Depois deste, o `tech-challenge-infra-db`.
 
 ---
@@ -298,6 +328,7 @@ Consumido pelo `auth-lambda` e pelos pipelines:
 | EBS dos nodes | US$ 0,004 | |
 | API Gateway | ~US$ 0 | US$ 1,00 por milhão de requisições |
 | ECR | ~US$ 0 | 500 MB grátis; a política de retenção segura o resto |
+| Métricas da Lambda no New Relic | ~US$ 0 | leituras na API do CloudWatch a cada 5 min, centavos por sessão |
 | **Total** | **~US$ 0,14/h** | ~US$ 3,40/dia · ~US$ 100/mês |
 
 Configure um **AWS Budget** com alerta em US$ 5 e US$ 20. Todo recurso leva a tag
@@ -307,19 +338,49 @@ Configure um **AWS Budget** com alerta em US$ 5 e US$ 20. Todo recurso leva a ta
 
 ## Observabilidade
 
-O `nri-bundle` cobre o lado do cluster: CPU e memória de nodes e pods, estado dos
-objetos (deployments, HPA, réplicas), eventos e coleta do stdout — que a aplicação já
-emite em JSON com `correlation_id`, então chega ao New Relic indexado campo a campo.
+| Sinal | De onde vem |
+|---|---|
+| CPU, memória, réplicas do HPA e eventos do cluster | `nri-bundle` |
+| Logs JSON dos pods, com `correlation_id` e `trace.id` | `nri-bundle`, a partir do stdout |
+| APM: latência, erros e traces da API | agente Python na imagem da aplicação |
+| Invocações e erros da Lambda | integração AWS por polling do CloudWatch |
+| Uptime | monitor sintético em `GET /health`, a cada 5 minutos |
 
-A instrumentação da aplicação (APM, latência, traces) **não** vem daqui: é o agente
-Python dentro da imagem, ligado pelo `entrypoint.sh` quando há licença configurada.
+O access log do API Gateway registra `requestId`, latência e erro de integração, e o `requestId`
+é propagado para a aplicação como `x-request-id`, costurando o log do gateway ao log do pod.
 
-O access log do API Gateway registra `requestId`, latência e erro de integração — e o
-`requestId` é propagado para a aplicação como `x-request-id`, costurando o log do
-gateway ao log do pod.
+### Dashboard "Tech Challenge · Oficina"
 
-**Variável necessária:** `newrelic_license_key` (ou o secret `NEW_RELIC_LICENSE_KEY`
-no CI). Vazia, nada é instalado e o cluster sobe normalmente.
+| Página | Widgets |
+|---|---|
+| Ordens de serviço | OS abertas hoje · volume diário · tempo médio por status · últimas mudanças de status |
+| API e integrações | latência p95 e média · uptime em 24h · healthcheck externo · erros por componente · Lambda |
+| Kubernetes | CPU e memória por pod · réplicas do HPA · reinícios de container |
+
+Os widgets de negócio leem o evento `os_status`, que a aplicação loga a cada mudança de status.
+
+### Alertas
+
+| Condição | Consulta |
+|---|---|
+| Falha no processamento de ordens de serviço | resposta 5xx ou erro em `/atendimento/os*`, em janela de 1 minuto |
+| API fora do ar para o monitor externo | check sintético sem sucesso, em janela de 5 minutos |
+
+Com `email_alertas` definido, os incidentes chegam por e-mail; sem ele, ficam em **Alerts → Issues**.
+
+### Variáveis
+
+| Variável | Para quê | Vazia |
+|---|---|---|
+| `newrelic_license_key` | instala o `nri-bundle` | cluster sobe sem agente |
+| `newrelic_api_key` · `newrelic_account_id` | dashboard, alertas, monitor e integração AWS | nada disso é criado |
+| `newrelic_regiao` | `US` (padrão) ou `EU` | — |
+| `email_alertas` | destino dos alertas | incidentes só no painel |
+
+Com `make`, elas vêm das variáveis de ambiente `NEW_RELIC_LICENSE_KEY`, `NEW_RELIC_API_KEY`,
+`NEW_RELIC_ACCOUNT_ID` e `EMAIL_ALERTAS`, as mesmas que o `make github-segredos` grava no GitHub.
+A licença (`INGEST - LICENSE`) e a User key (`USER`, começa com `NRAK-`) ficam em **API keys**, no
+New Relic; o ID da conta aparece na mesma tela.
 
 ---
 
@@ -345,6 +406,8 @@ A `main` é protegida: infraestrutura muda apenas por Pull Request revisado.
 | `AWS_ROLE_ARN` | secret | `make github-segredos`, no `tech-challenge-infra-k8s` |
 | `AMBIENTE_ATIVO` | variável | `make up` e `make down`, no `tech-challenge-infra-k8s` |
 | `NEW_RELIC_LICENSE_KEY` | secret | `make github-segredos`, se a chave estiver exportada |
+| `NEW_RELIC_API_KEY` · `NEW_RELIC_ACCOUNT_ID` | secret | `make github-segredos`, se estiverem exportadas |
+| `EMAIL_ALERTAS` | variável | à mão, opcional |
 
 O primeiro `apply` é sempre local (`make up`): a role que o pipeline assume nasce aqui.
 
