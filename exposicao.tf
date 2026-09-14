@@ -124,6 +124,11 @@ resource "aws_apigatewayv2_stage" "principal" {
   }
 }
 
+# No stage $default a invoke_url termina em "/"; sem o corte, quem monta "${url}/rota" gera "//rota".
+locals {
+  url_api = trimsuffix(aws_apigatewayv2_stage.principal.invoke_url, "/")
+}
+
 resource "aws_apigatewayv2_integration" "eks" {
   api_id             = aws_apigatewayv2_api.principal.id
   integration_type   = "HTTP_PROXY"
