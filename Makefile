@@ -39,11 +39,11 @@ validate: ## Valida a configuração, sem AWS
 	terraform validate
 
 plan: preflight ## Mostra o que será alterado
-	@test -d .terraform || $(MAKE) --no-print-directory init
+	@test -f .terraform/terraform.tfstate || $(MAKE) --no-print-directory init
 	terraform plan $(TF_VARS)
 
 up: preflight ## Sobe o cluster (~15 min) e liga o ambiente nos pipelines. A cobrança começa aqui.
-	@test -d .terraform || $(MAKE) --no-print-directory init
+	@test -f .terraform/terraform.tfstate || $(MAKE) --no-print-directory init
 	terraform apply $(TF_VARS)
 	@$(MAKE) --no-print-directory kubeconfig
 	@./scripts/github.sh ligar || echo "⚠ AMBIENTE_ATIVO não foi ligado: rode 'make ambiente-ligar'."
@@ -52,7 +52,7 @@ up: preflight ## Sobe o cluster (~15 min) e liga o ambiente nos pipelines. A cob
 down: conta ## Desliga o ambiente nos pipelines e destrói o cluster
 	@! aws lambda get-function --function-name tech-challenge-auth >/dev/null 2>&1 || { echo "A Lambda ainda existe: rode 'make destroy' no tech-challenge-auth-lambda."; exit 1; }
 	@test -n "$(GITHUB_OWNER)" || { echo "Dono dos repositórios desconhecido: rode com GITHUB_OWNER=seu-usuario."; exit 1; }
-	@test -d .terraform || $(MAKE) --no-print-directory init
+	@test -f .terraform/terraform.tfstate || $(MAKE) --no-print-directory init
 	@if terraform state list 2>/dev/null | grep -q '^newrelic_' && [ -z "$$TF_VAR_newrelic_api_key" ] && ! grep -qE '^newrelic_api_key *= *"NRAK' terraform.tfvars 2>/dev/null; then \
 		echo "Dashboard e alertas existem no New Relic: exporte NEW_RELIC_API_KEY e NEW_RELIC_ACCOUNT_ID antes do down."; exit 1; fi
 	@./scripts/github.sh desligar || echo "⚠ AMBIENTE_ATIVO não foi desligado: rode 'make ambiente-desligar'."
