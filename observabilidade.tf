@@ -193,8 +193,7 @@ resource "newrelic_nrql_alert_condition" "oficina" {
   enabled                      = true
   violation_time_limit_seconds = 86400
   aggregation_window           = each.value.janela
-  # Toda requisição ou check gera ponto de dado (0 quando não há falha), então o incidente fecha na recuperação;
-  # sem tráfego nenhum, a perda de sinal fecha o que estiver aberto.
+  # Sinal contínuo (0 sem falha): o incidente fecha na recuperação ou quando o sinal some.
   aggregation_method             = "event_timer"
   aggregation_timer              = each.value.janela
   fill_option                    = "static"
