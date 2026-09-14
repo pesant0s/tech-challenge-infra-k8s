@@ -137,9 +137,10 @@ resource "aws_apigatewayv2_integration" "eks" {
   connection_type    = "VPC_LINK"
   connection_id      = aws_apigatewayv2_vpc_link.principal.id
 
-  # O requestId do gateway vira o correlation_id da API.
+  # O requestId vira o correlation_id da API; o IP de origem alimenta o rate limit do login.
   request_parameters = {
     "overwrite:header.x-request-id" = "$context.requestId"
+    "overwrite:header.x-cliente-ip" = "$context.identity.sourceIp"
   }
 }
 
