@@ -59,6 +59,11 @@ down: conta ## Desliga o ambiente nos pipelines e destrói o cluster
 		echo "Dashboard e alertas existem no New Relic: exporte NEW_RELIC_API_KEY e NEW_RELIC_ACCOUNT_ID antes do down."; exit 1; fi
 	@./scripts/github.sh desligar || echo "⚠ AMBIENTE_ATIVO não foi desligado: rode 'make ambiente-desligar'."
 	terraform destroy $(TF_VARS)
+	@# O plugin de rede do EKS deixa interfaces órfãs e o SG do cluster, que prenderiam a VPC no destroy do infra-db.
+	@for eni in $$(aws ec2 describe-network-interfaces --filters Name=tag:cluster.k8s.amazonaws.com/name,Values=tech-challenge-eks Name=status,Values=available --query 'NetworkInterfaces[].NetworkInterfaceId' --output text); do \
+		aws ec2 delete-network-interface --network-interface-id $$eni && echo "Interface órfã do cluster apagada: $$eni"; done
+	@for sg in $$(aws ec2 describe-security-groups --filters Name=group-name,Values='eks-cluster-sg-tech-challenge-eks-*' --query 'SecurityGroups[].GroupId' --output text); do \
+		aws ec2 delete-security-group --group-id $$sg && echo "Security group do cluster apagado: $$sg"; done
 
 apply: up ## Sinônimo de up
 destroy: down ## Sinônimo de down
