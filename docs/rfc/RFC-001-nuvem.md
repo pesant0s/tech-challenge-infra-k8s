@@ -46,7 +46,7 @@ experiência prévia do time com a plataforma pesa num prazo curto.
 O plano de controle do EKS é cobrado por hora e não tem free tier. Nesse critério, AKS e GKE
 seriam mais baratos. A proposta aceita o custo e o contém:
 
-- ambiente efêmero, ligado apenas em sessões de trabalho, a cerca de US$ 0,14/h (ADR-013);
+- ambiente efêmero, ligado apenas em sessões de trabalho, a cerca de US$ 0,16/h (ADR-013);
 - sem NAT Gateway, com o banco e a Lambda em subnets sem rota para a internet (ADR-002);
 - nodes em Spot (ADR-006);
 - AWS Budget com alertas e todos os recursos marcados com `Project=tech-challenge`.

@@ -88,7 +88,7 @@ status: ## Estado do cluster e das cargas
 
 custo: ## O que pesa enquanto o cluster está de pé
 	@echo "EKS control plane  US\$$ 0,100/h (suporte padrão; no estendido, US\$$ 0,60)"
-	@echo "2x t3.small Spot   US\$$ 0,014/h"
+	@echo "2x t3.medium Spot  US\$$ 0,033/h"
 	@echo "NLB interno        US\$$ 0,023/h"
 	@echo "EBS dos nodes      US\$$ 0,004/h"
-	@echo "Total ligado       ~US\$$ 0,14/h"
+	@echo "Total ligado       ~US\$$ 0,16/h"
