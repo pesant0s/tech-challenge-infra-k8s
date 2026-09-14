@@ -10,12 +10,12 @@ locals {
   alertas = {
     falha_os = {
       nome     = "Falha no processamento de ordens de serviço"
-      consulta = "SELECT count(*) FROM Log WHERE logger = 'oficina.http' AND http_path LIKE '/atendimento/os%' AND (http_status >= 500 OR level = 'ERROR')"
+      consulta = "SELECT filter(count(*), WHERE http_status >= 500 OR level = 'ERROR') FROM Log WHERE logger = 'oficina.http' AND http_path LIKE '/atendimento/os%'"
       janela   = 60
     }
     api_fora_do_ar = {
       nome     = "API fora do ar para o monitor externo"
-      consulta = "SELECT count(*) FROM SyntheticCheck WHERE monitorName = '${local.monitor}' AND result != 'SUCCESS'"
+      consulta = "SELECT filter(count(*), WHERE result != 'SUCCESS') FROM SyntheticCheck WHERE monitorName = '${local.monitor}'"
       janela   = 300
     }
   }
@@ -192,9 +192,15 @@ resource "newrelic_nrql_alert_condition" "oficina" {
   name                         = each.value.nome
   enabled                      = true
   violation_time_limit_seconds = 86400
-  aggregation_method           = "event_flow"
-  aggregation_delay            = 120
   aggregation_window           = each.value.janela
+  # Sinal contínuo (0 sem falha): o incidente fecha na recuperação ou quando o sinal some.
+  aggregation_method             = "event_timer"
+  aggregation_timer              = each.value.janela
+  fill_option                    = "static"
+  fill_value                     = 0
+  expiration_duration            = each.value.janela * 3
+  open_violation_on_expiration   = false
+  close_violations_on_expiration = true
 
   nrql {
     query = each.value.consulta
@@ -291,5 +297,6 @@ resource "newrelic_cloud_aws_integrations" "principal" {
   lambda {
     aws_regions              = [var.regiao]
     metrics_polling_interval = 300
+    fetch_tags               = true
   }
 }

@@ -5,6 +5,7 @@ regiao     = "us-east-1"
 # org_github vem do remote do git quando se usa `make`. Só defina se rodar
 # o terraform diretamente:
 # org_github = "seu-usuario-github"
+# id_dono_github = "12345678"   # gh api users/seu-usuario-github --jq .id
 
 # Chave de licença do New Relic (painel → API keys → INGEST-LICENSE).
 # Deixe vazia para subir o cluster sem o agente.

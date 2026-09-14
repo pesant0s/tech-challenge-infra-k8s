@@ -18,6 +18,7 @@ env:
   TF_IN_AUTOMATION: "true"
   TF_VERSION: "1.10.5"
   TF_VAR_org_github: ${{ github.repository_owner }}
+  TF_VAR_id_dono_github: ${{ github.repository_owner_id }}
 
 permissions:
   contents: read
