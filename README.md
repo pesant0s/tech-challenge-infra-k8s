@@ -40,8 +40,7 @@ Terraform que provisiona o **cluster Amazon EKS**, o **API Gateway**, o **ECR**,
 | ADR-015 e 016 · padrão de comunicação e notificação | `tech-challenge-app` · README |
 | Swagger | `<url_api>/docs` na AWS · `http://localhost:8000/docs` localmente |
 | Coleção Postman | `tech-challenge-app` · `postman/oficina.postman_collection.json` |
-| Ambientes e deploy ativo | só produção, com a dispensa de homologação registrada no README do `tech-challenge-app`; o ambiente AWS é efêmero (ADR-013), e a URL da API sai em `make output`, no `tech-challenge-infra-k8s`, durante uma sessão |
-
+| Ambientes e deploy ativo | Só produção, justificado no `tech-challenge-app` · README, seção *Deploy*. O ambiente AWS é efêmero (ADR-013): a URL da API sai em `make output`, no `tech-challenge-infra-k8s`, enquanto a sessão dura |
 
 ---
 
@@ -294,7 +293,7 @@ de API fora do ar abre um incidente. É esperado e fecha sozinho quando a API re
 | VPC Link | Ligação privada entre o gateway e o NLB |
 | OIDC + Role | `AdministratorAccess`, assumida só pela `main` dos quatro repositórios |
 | Launch template | Coloca os nodes no grupo `cliente-db`, o único que o RDS aceita |
-| New Relic | `nri-bundle` via Helm — infraestrutura, eventos, logs e Prometheus |
+| New Relic | `nri-bundle` via Helm — agente de infraestrutura, `kube-state-metrics`, eventos do cluster e logs |
 | Dashboard e alertas | Painel da oficina, 2 alertas e monitor de uptime (com a User key) |
 | Role do New Relic | Somente leitura, para coletar as métricas da Lambda no CloudWatch |
 
@@ -406,6 +405,9 @@ Os widgets de negócio leem o evento `os_status`, que a aplicação loga a cada 
 |---|---|
 | Falha no processamento de ordens de serviço | resposta 5xx ou erro em `/atendimento/os*`, em janela de 1 minuto |
 | API fora do ar para o monitor externo | check sintético sem sucesso, em janela de 5 minutos |
+
+As duas consultas varrem todos os eventos da janela e contam quantos falharam, em vez de buscar só
+as falhas: assim há sinal mesmo quando está tudo bem, e o incidente **fecha sozinho** na recuperação.
 
 Com `email_alertas` definido, os incidentes chegam por e-mail; sem ele, ficam em **Alerts → Issues**.
 
