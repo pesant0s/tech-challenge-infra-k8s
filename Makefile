@@ -10,6 +10,12 @@ BUCKET = tech-challenge-tfstate-$(CONTA)
 GITHUB_OWNER ?= $(shell git config --get remote.origin.url 2>/dev/null | sed -E 's|^.*github\.com[:/]([^/]+)/.*$$|\1|')
 export GITHUB_OWNER
 TF_VARS = -var "org_github=$(GITHUB_OWNER)"
+# Chaves do New Relic pelas mesmas variáveis que o github-segredos grava; um terraform.tfvars ainda prevalece.
+TF_VAR_newrelic_license_key ?= $(NEW_RELIC_LICENSE_KEY)
+TF_VAR_newrelic_api_key ?= $(NEW_RELIC_API_KEY)
+TF_VAR_newrelic_account_id ?= $(NEW_RELIC_ACCOUNT_ID)
+TF_VAR_email_alertas ?= $(EMAIL_ALERTAS)
+export TF_VAR_newrelic_license_key TF_VAR_newrelic_api_key TF_VAR_newrelic_account_id TF_VAR_email_alertas
 
 help: ## Lista os alvos
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-18s\033[0m %s\n", $$1, $$2}'
@@ -46,14 +52,16 @@ up: preflight ## Sobe o cluster (~15 min) e liga o ambiente nos pipelines. A cob
 down: conta ## Desliga o ambiente nos pipelines e destrói o cluster
 	@! aws lambda get-function --function-name tech-challenge-auth >/dev/null 2>&1 || { echo "A Lambda ainda existe: rode 'make destroy' no tech-challenge-auth-lambda."; exit 1; }
 	@test -n "$(GITHUB_OWNER)" || { echo "Dono dos repositórios desconhecido: rode com GITHUB_OWNER=seu-usuario."; exit 1; }
-	@./scripts/github.sh desligar || echo "⚠ AMBIENTE_ATIVO não foi desligado: rode 'make ambiente-desligar'."
 	@test -d .terraform || $(MAKE) --no-print-directory init
+	@if terraform state list 2>/dev/null | grep -q '^newrelic_' && [ -z "$$TF_VAR_newrelic_api_key" ] && ! grep -qE '^newrelic_api_key *= *"NRAK' terraform.tfvars 2>/dev/null; then \
+		echo "Dashboard e alertas existem no New Relic: exporte NEW_RELIC_API_KEY e NEW_RELIC_ACCOUNT_ID antes do down."; exit 1; fi
+	@./scripts/github.sh desligar || echo "⚠ AMBIENTE_ATIVO não foi desligado: rode 'make ambiente-desligar'."
 	terraform destroy $(TF_VARS)
 
 apply: up ## Sinônimo de up
 destroy: down ## Sinônimo de down
 
-github-segredos: conta ## Grava AWS_ROLE_ARN (e NEW_RELIC_LICENSE_KEY, se exportada) nos 4 repositórios
+github-segredos: conta ## Grava AWS_ROLE_ARN e as chaves do New Relic que estiverem exportadas
 	@./scripts/github.sh segredos
 
 ambiente-ligar: ## Liga AMBIENTE_ATIVO nos 4 repositórios
